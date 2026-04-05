@@ -7,7 +7,7 @@
  \___ \| '_ \ / _` |/ _` |/ _ \ \  | |\/| |/ _` | __/ __| '_ \  | |
  ____) | | | | (_| | (_| | (_) |  | |  | | (_| | || (__| | | | |_|
 |_____/|_| |_|\__,_|\__,_|\___/   |_|  |_|\__,_|\__\___|_| |_| (_)
-                                         PRO  v1  —  by  Data2391
+                                           v1  —  by  Data2391
 ```
 
 **OSINT Facial Recognition Engine**
@@ -23,7 +23,7 @@
 
 ## Presentation
 
-SHADOW-MATCH PRO est un meta-moteur de reconnaissance faciale OSINT 100% local.  
+SHADOW-MATCH est un meta-moteur de reconnaissance faciale OSINT 100% local.  
 Il combine la vision par ordinateur de pointe (**InsightFace ArcFace**) avec un scraping web de niveau militaire (**Playwright + bypass anti-bot Yandex**) pour identifier automatiquement une cible a partir d'une simple photo.
 
 **Zero API payante. Zero cloud. Zero trace. Ton hardware, tes regles.**
