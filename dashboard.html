@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SHADOW-MATCH — Cyber-Investigator Dashboard</title>
+<style>
+  :root {
+    --bg:         #080c14;
+    --bg2:        #0d1220;
+    --bg3:        #111827;
+    --blue:       #00aaff;
+    --blue-dim:   #0066aa;
+    --cyan:       #00ffee;
+    --magenta:    #cc00ff;
+    --green:      #00ff88;
+    --red:        #ff2244;
+    --red-dim:    #881122;
+    --yellow:     #ffcc00;
+    --text:       #c0d8f0;
+    --text-dim:   #4a6a8a;
+    --border:     #1a3050;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── SCANLINE OVERLAY ── */
+  body::after {
+    content: '';
+    position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+    background: repeating-linear-gradient(
+      to bottom,
+      transparent 0px, transparent 3px,
+      rgba(0,0,0,0.08) 3px, rgba(0,0,0,0.08) 4px
+    );
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 24px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--blue-dim);
+    box-shadow: 0 0 20px rgba(0,170,255,0.15);
+  }
+  .logo {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo-hex {
+    width: 34px; height: 34px;
+    background: var(--blue);
+    clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: bold; color: #000;
+    box-shadow: 0 0 12px var(--blue);
+  }
+  .logo-title {
+    font-size: 16px; font-weight: bold; letter-spacing: 3px;
+    color: var(--blue); text-shadow: 0 0 10px var(--blue);
+  }
+  .logo-sub {
+    font-size: 9px; color: var(--text-dim); letter-spacing: 2px;
+    margin-top: 1px;
+  }
+  .header-right {
+    display: flex; align-items: center; gap: 20px;
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .status-label { font-size: 10px; color: var(--text-dim); letter-spacing: 2px; }
+
+  /* ── MAIN LAYOUT ── */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    grid-template-rows: auto 1fr;
+    gap: 16px;
+    padding: 16px;
+    min-height: calc(100vh - 60px);
+  }
+
+  /* ── PANEL BASE ── */
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px;
+    background: rgba(0,170,255,0.06);
+    border-bottom: 1px solid var(--border);
+    font-size: 10px; letter-spacing: 3px; color: var(--blue);
+    text-transform: uppercase;
+  }
+  .panel-header-tag {
+    font-size: 9px; color: var(--text-dim); letter-spacing: 1px;
+  }
+
+  /* ── DROP ZONE ── */
+  .drop-zone-wrap { grid-column: 1; grid-row: 1; }
+  .drop-zone-inner {
+    padding: 24px;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+  }
+  .drop-zone {
+    width: 100%; max-width: 480px;
+    aspect-ratio: 4/3;
+    border: 2px dashed var(--blue-dim);
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px;
+    cursor: pointer;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    position: relative;
+    overflow: hidden;
+    background: rgba(0,170,255,0.02);
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--blue);
+    box-shadow: 0 0 20px rgba(0,170,255,0.2), inset 0 0 20px rgba(0,170,255,0.05);
+  }
+  .drop-zone-text { font-size: 11px; color: var(--text-dim); letter-spacing: 2px; }
+  .drop-zone-sub  { font-size: 9px; color: var(--text-dim); opacity: 0.5; }
+  .drop-zone #preview-img {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%; object-fit: cover; display: none;
+  }
+
+  /* ── LASER SCANLINE ── */
+  .laser {
+    position: absolute; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, var(--red), var(--red), transparent);
+    box-shadow: 0 0 8px var(--red), 0 0 20px var(--red);
+    top: -4px;
+    display: none;
+    animation: laser-scan 1.8s linear infinite;
+    z-index: 10;
+  }
+  @keyframes laser-scan {
+    0%   { top: 0%; }
+    100% { top: 100%; }
+  }
+  .laser-active .laser { display: block; }
+  .laser-active #preview-img { display: block; }
+  .laser-active .drop-zone-text, .laser-active .drop-zone-sub { display: none; }
+
+  /* scan label */
+  .scan-label {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+    font-size: 11px; letter-spacing: 2px; color: var(--red);
+    text-shadow: 0 0 8px var(--red);
+    display: none; z-index: 11;
+  }
+  .laser-active .scan-label { display: block; }
+
+  /* ── CONTROLS ── */
+  .controls {
+    display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    width: 100%; max-width: 480px;
+  }
+  .controls select, .controls input[type=number] {
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--text); padding: 6px 10px; border-radius: 3px;
+    font-family: inherit; font-size: 11px; flex: 1;
+  }
+  .controls label {
+    font-size: 10px; color: var(--text-dim); letter-spacing: 1px;
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+  }
+  .controls input[type=checkbox] { accent-color: var(--blue); }
+
+  .btn-scan {
+    background: transparent;
+    border: 1px solid var(--blue);
+    color: var(--blue);
+    padding: 8px 22px;
+    font-family: inherit; font-size: 11px; letter-spacing: 3px;
+    cursor: pointer; border-radius: 3px;
+    transition: all 0.2s;
+    box-shadow: 0 0 10px rgba(0,170,255,0.2);
+  }
+  .btn-scan:hover {
+    background: rgba(0,170,255,0.12);
+    box-shadow: 0 0 20px rgba(0,170,255,0.4);
+  }
+  .btn-scan:disabled {
+    opacity: 0.4; cursor: not-allowed;
+  }
+
+  /* ── LIVE FEED ── */
+  .feed-wrap { grid-column: 2; grid-row: 1 / 3; }
+  .feed-title {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .feed-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--red);
+    box-shadow: 0 0 6px var(--red);
+    animation: pulse 1s infinite;
+  }
+  .feed-log {
+    height: calc(100vh - 160px);
+    overflow-y: auto;
+    padding: 12px;
+    font-size: 10px;
+    line-height: 1.7;
+    color: var(--text-dim);
+    scroll-behavior: smooth;
+  }
+  .feed-log::-webkit-scrollbar { width: 4px; }
+  .feed-log::-webkit-scrollbar-thumb { background: var(--border); }
+  .log-line { margin-bottom: 2px; }
+  .log-line.match  { color: var(--magenta); font-weight: bold; }
+  .log-line.warn   { color: var(--yellow); }
+  .log-line.error  { color: var(--red); }
+  .log-line.upload { color: var(--cyan); }
+  .log-line.captcha {
+    color: var(--yellow);
+    background: rgba(255,204,0,0.08);
+    padding: 4px 8px; border-left: 3px solid var(--yellow);
+    margin: 4px 0;
+  }
+
+  /* ── CAPTCHA BANNER ── */
+  #captcha-banner {
+    display: none;
+    position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+    background: var(--bg2);
+    border: 1px solid var(--yellow);
+    box-shadow: 0 0 30px rgba(255,204,0,0.3);
+    padding: 16px 28px;
+    border-radius: 4px; z-index: 1000;
+    text-align: center;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn { from{opacity:0;top:60px} to{opacity:1;top:70px} }
+  #captcha-banner.show { display: block; }
+  .captcha-title {
+    font-size: 13px; color: var(--yellow); letter-spacing: 2px; margin-bottom: 8px;
+    text-shadow: 0 0 8px var(--yellow);
+  }
+  .captcha-body { font-size: 10px; color: var(--text-dim); margin-bottom: 12px; }
+  .btn-captcha-done {
+    background: var(--yellow); color: #000;
+    border: none; padding: 6px 18px;
+    font-family: inherit; font-size: 10px; letter-spacing: 2px;
+    cursor: pointer; border-radius: 2px;
+  }
+
+  /* ── MATCHES GALLERY ── */
+  .gallery-wrap { grid-column: 1; grid-row: 2; }
+  .gallery-inner { padding: 16px; display: flex; gap: 14px; flex-wrap: wrap; }
+
+  .match-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px;
+    width: 260px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    animation: cardIn 0.4s ease;
+  }
+  @keyframes cardIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+  .match-card.high {
+    border-color: var(--red);
+    box-shadow: 0 0 20px rgba(255,34,68,0.25);
+  }
+  .match-card.medium { border-color: var(--yellow); }
+  .match-card.normal { border-color: var(--blue); }
+
+  .match-card-header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 10px;
+  }
+  .match-alert {
+    font-size: 9px; letter-spacing: 2px; padding: 2px 8px;
+    border-radius: 2px; display: none;
+  }
+  .high .match-alert {
+    display: block;
+    background: var(--red-dim);
+    color: var(--red);
+    border: 1px solid var(--red);
+    animation: blink 0.8s step-end infinite;
+    text-shadow: 0 0 6px var(--red);
+  }
+  @keyframes blink { 50%{opacity:0} }
+
+  .match-images {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
+  }
+  .match-img-wrap { flex: 1; text-align: center; }
+  .match-img-label {
+    font-size: 8px; color: var(--text-dim); letter-spacing: 1px; margin-bottom: 4px;
+  }
+  .match-img-wrap img {
+    width: 80px; height: 80px; object-fit: cover;
+    border: 1px solid var(--border); border-radius: 2px;
+    background: var(--bg);
+  }
+  .match-arrow { color: var(--blue); font-size: 18px; }
+
+  .match-meta { font-size: 9px; margin-bottom: 10px; }
+  .match-meta-row {
+    display: flex; justify-content: space-between;
+    padding: 3px 0; border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .match-meta-row span:last-child { color: var(--text); }
+
+  /* confidence arc */
+  .arc-wrap {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+  }
+  .arc-svg { flex-shrink: 0; }
+  .arc-label { font-size: 18px; font-weight: bold; }
+  .high   .arc-label { color: var(--red); text-shadow: 0 0 8px var(--red); }
+  .medium .arc-label { color: var(--yellow); }
+  .normal .arc-label { color: var(--green); }
+  .arc-sub { font-size: 8px; color: var(--text-dim); letter-spacing: 1px; }
+
+  .btn-open {
+    display: block; width: 100%; padding: 7px;
+    background: transparent; border: 1px solid var(--blue);
+    color: var(--blue); font-family: inherit; font-size: 10px;
+    letter-spacing: 2px; cursor: pointer; border-radius: 2px;
+    transition: all 0.2s;
+    text-align: center; text-decoration: none;
+  }
+  .btn-open:hover {
+    background: rgba(0,170,255,0.12);
+    box-shadow: 0 0 12px rgba(0,170,255,0.3);
+  }
+  .high .btn-open { border-color: var(--red); color: var(--red); }
+  .high .btn-open:hover { background: rgba(255,34,68,0.1); }
+
+
+  /* ── FACE SELECTOR ── */
+  #face-selector-wrap {
+    display: none;
+    width: 100%; max-width: 480px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 12px;
+  }
+  #face-selector-wrap.show { display: block; }
+  .face-sel-title {
+    font-size: 10px; color: var(--cyan); letter-spacing: 2px; margin-bottom: 10px;
+  }
+  .face-grid {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .face-thumb {
+    width: 72px; height: 72px; object-fit: cover;
+    border: 2px solid var(--border); border-radius: 3px;
+    cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s;
+    background: var(--bg);
+  }
+  .face-thumb:hover { border-color: var(--blue); }
+  .face-thumb.selected {
+    border-color: var(--cyan);
+    box-shadow: 0 0 12px rgba(0,255,238,0.4);
+  }
+  .face-sel-hint {
+    font-size: 9px; color: var(--text-dim); margin-top: 6px;
+    letter-spacing: 1px;
+  }
+  #no-matches {
+    color: var(--text-dim); font-size: 11px; letter-spacing: 2px; padding: 20px;
+  }
+</style>
+</head>
+<body>
+
+    <div style="position:fixed;top:10px;right:20px;z-index:9999;color:#00ffcc;font-family:monospace;text-align:right;background:rgba(0,0,0,0.8);padding:10px;border:1px solid #00ffcc;border-radius:5px;">
+        ⚡ V1.0 Open Source Edition<br>
+        <a href="https://github.com/data2391" target="_blank" style="color:#ff0055;text-decoration:none;font-weight:bold;">[ / / BY DATA2391 \ \ ]</a>
+    </div>
+    
+
+<!-- ── CAPTCHA BANNER ─────────────────────────────────────────────────────── -->
+<div id="captcha-banner">
+  <div class="captcha-title">⚠ CAPTCHA REQUIRED</div>
+  <div class="captcha-body">
+    Yandex has triggered a captcha challenge.<br>
+    Solve it in the Playwright browser window,<br>
+    then click <strong>DONE</strong> to resume the scan.
+  </div>
+  <button class="btn-captcha-done" onclick="dismissCaptcha()">✔ DONE — RESUME</button>
+</div>
+
+<!-- ── HEADER ─────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-hex">◈</div>
+    <div>
+      <div class="logo-title">SHADOW-MATCH</div>
+      <div class="logo-sub">CYBER-INVESTIGATOR DASHBOARD  v2.0</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="status-label">OSINT ENGINE</div>
+    <div class="status-dot"></div>
+  </div>
+</header>
+
+<!-- ── MAIN ───────────────────────────────────────────────────────────────── -->
+<div class="main">
+
+  <!-- DROP ZONE + CONTROLS -->
+  <div class="panel drop-zone-wrap">
+    <div class="panel-header">
+      <span>DROP-ZONE</span>
+      <span class="panel-header-tag">VISUAL SEARCH INITIATE</span>
+    </div>
+    <div class="drop-zone-inner">
+
+      <input type="file" id="file-input" accept="image/*" style="display:none">
+      <div class="drop-zone" id="drop-zone"
+           onclick="document.getElementById('file-input').click()"
+           ondragover="event.preventDefault();this.classList.add('drag-over')"
+           ondragleave="this.classList.remove('drag-over')"
+           ondrop="handleDrop(event)">
+        <div class="laser"></div>
+        <span class="scan-label">VISUAL SEARCH INITIATE</span>
+        <img id="preview-img" src="" alt="">
+        <div class="drop-zone-text">DROP TARGET IMAGE</div>
+        <div class="drop-zone-sub">JPG · PNG · WEBP — drag & drop or click</div>
+      </div>
+
+      <!-- FACE SELECTOR (apparaît si plusieurs visages détectés) -->
+      <div id="face-selector-wrap">
+        <div class="face-sel-title">⬡ MULTIPLE FACES DETECTED — SELECT TARGET</div>
+        <div class="face-grid" id="face-grid"></div>
+        <div class="face-sel-hint">Cliquer sur le visage cible pour le scan ArcFace</div>
+      </div>
+
+      <div class="controls">
+        <select id="model-select">
+          <option value="buffalo_l">buffalo_l — Precise</option>
+          <option value="buffalo_s">buffalo_s — Fast (batch)</option>
+        </select>
+        <input type="number" id="threshold" value="0.45" min="0.1" max="0.99" step="0.01"
+               title="ArcFace distance threshold" placeholder="Threshold">
+        <label>
+          <input type="checkbox" id="stealth-check">
+          STEALTH -S
+        </label>
+        <button class="btn-scan" id="btn-scan" onclick="startScan()" disabled>
+          ▶ INITIATE SCAN
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- LIVE FEED -->
+  <div class="panel feed-wrap">
+    <div class="panel-header">
+      <div class="feed-title">
+        <div class="feed-dot"></div>
+        <span>OSINT OPERATIONS FEED</span>
+      </div>
+      <span class="panel-header-tag" id="feed-count">0 EVENTS</span>
+    </div>
+    <div class="feed-log" id="feed-log">
+      <div class="log-line" style="color:var(--text-dim);">
+        Waiting for target image upload...
+      </div>
+    </div>
+  </div>
+
+  <!-- MATCHES GALLERY -->
+  <div class="panel gallery-wrap">
+    <div class="panel-header">
+      <span>CONFIRMED MATCHES GALLERY</span>
+      <span class="panel-header-tag" id="match-count">(ARCFACE DISTANCE &lt; 0.45)</span>
+    </div>
+    <div class="gallery-inner" id="gallery">
+      <div id="no-matches">NO MATCHES YET — INITIATE A SCAN</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── WebSocket ────────────────────────────────────────────────────────────────
+let ws;
+let feedCount = 0;
+let matchCount = 0;
+
+function initWS() {
+  ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen    = () => addLog("WebSocket connected — SHADOW-MATCH online.", "upload");
+  ws.onclose   = () => { setTimeout(initWS, 2000); };
+  ws.onmessage = (e) => handleMessage(e.data);
+}
+
+function handleMessage(data) {
+  if (data === "__CAPTCHA_REQUIRED__") {
+    showCaptchaBanner();
+    addLog("⚠ CAPTCHA REQUIRED — solve in browser window!", "captcha");
+    return;
+  }
+  if (data.startsWith("__MATCH__")) {
+    const match = JSON.parse(data.slice(9));
+    addMatchCard(match);
+    return;
+  }
+  if (data.startsWith("__DONE__")) {
+    const results = JSON.parse(data.slice(8));
+    addLog(`✔ SCAN COMPLETE — ${results.length} confirmed match(es).`,
+           results.length > 0 ? "match" : "upload");
+    stopLaser();
+    document.getElementById("btn-scan").disabled = false;
+    return;
+  }
+  if (data.startsWith("__ERROR__")) {
+    addLog("✖ " + data.slice(9), "error");
+    stopLaser();
+    document.getElementById("btn-scan").disabled = false;
+    return;
+  }
+  // Regular log line
+  const cls = data.includes("MATCH CONFIRMED") ? "match"
+            : data.includes("Uploading")        ? "upload"
+            : data.includes("⚠")               ? "warn"
+            : data.includes("✖")               ? "error"
+            : "";
+  addLog(data, cls);
+}
+
+function addLog(text, cls = "") {
+  const log = document.getElementById("feed-log");
+  const div = document.createElement("div");
+  div.className = "log-line " + cls;
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  feedCount++;
+  document.getElementById("feed-count").textContent = feedCount + " EVENTS";
+}
+
+// ── File handling ─────────────────────────────────────────────────────────────
+let selectedFile = null;
+
+document.getElementById("file-input").addEventListener("change", function() {
+  if (this.files[0]) loadPreview(this.files[0]);
+});
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById("drop-zone").classList.remove("drag-over");
+  const f = e.dataTransfer.files[0];
+  if (f && f.type.startsWith("image/")) loadPreview(f);
+}
+
+function loadPreview(file) {
+  selectedFile = file;
+  selectedFaceIndex = -1;
+  document.getElementById("face-selector-wrap").classList.remove("show");
+  document.getElementById("face-grid").innerHTML = "";
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById("preview-img").src = e.target.result;
+    document.getElementById("drop-zone").classList.add("laser-active");
+    document.getElementById("btn-scan").disabled = false;
+  };
+  reader.readAsDataURL(file);
+  // Lancer la detection de visages en parallele
+  detectFaces(file);
+}
+
+function stopLaser() {
+  document.getElementById("drop-zone").classList.remove("laser-active");
+}
+
+// ── Scan ──────────────────────────────────────────────────────────────────────
+async function startScan() {
+  if (!selectedFile) return;
+  document.getElementById("btn-scan").disabled = true;
+  document.getElementById("gallery").innerHTML =
+    '<div id="no-matches" style="color:var(--text-dim);font-size:11px;letter-spacing:2px;padding:20px;">SCANNING...</div>';
+  matchCount = 0;
+
+  document.getElementById("drop-zone").classList.add("laser-active");
+
+  const fd = new FormData();
+  fd.append("file",      selectedFile);
+  fd.append("model",     document.getElementById("model-select").value);
+  fd.append("threshold", document.getElementById("threshold").value);
+  fd.append("stealth",   document.getElementById("stealth-check").checked);
+  fd.append("face_index", selectedFaceIndex);
+
+  try {
+    const res = await fetch("/scan", { method: "POST", body: fd });
+    const data = await res.json();
+    if (data.preview) {
+      document.getElementById("preview-img").src = data.preview;
+    }
+    addLog("Scan job submitted — streaming results...", "upload");
+  } catch(e) {
+    addLog("✖ Failed to submit scan: " + e.message, "error");
+    document.getElementById("btn-scan").disabled = false;
+  }
+}
+
+// ── Match Card ────────────────────────────────────────────────────────────────
+function addMatchCard(match) {
+  const gallery = document.getElementById("gallery");
+  const noMatch = document.getElementById("no-matches");
+  if (noMatch) noMatch.remove();
+
+  matchCount++;
+  document.getElementById("match-count").textContent =
+    `${matchCount} MATCH(ES) — ARCFACE < ${document.getElementById("threshold").value}`;
+
+  const conf   = match.confidence;
+  const cardCls = conf >= 98 ? "high" : conf >= 88 ? "medium" : "normal";
+  const arcColor= conf >= 98 ? "#ff2244" : conf >= 88 ? "#ffcc00" : "#00ff88";
+
+  const card = document.createElement("div");
+  card.className = `match-card ${cardCls}`;
+  card.innerHTML = `
+    <div class="match-card-header">
+      <span style="font-size:9px;letter-spacing:2px;color:var(--text-dim)">
+        ${match.platform.toUpperCase()}
+      </span>
+      <span class="match-alert">⚡ HIGH-CONFIDENCE MATCH!</span>
+    </div>
+    <div class="match-images">
+      <div class="match-img-wrap">
+        <div class="match-img-label">TARGET</div>
+        <img src="${document.getElementById('preview-img').src}" alt="target">
+      </div>
+      <div class="match-arrow">→</div>
+      <div class="match-img-wrap">
+        <div class="match-img-label">FOUND PROFILE</div>
+        <img src="${match.thumb || '/static/img/unknown.png'}" alt="found"
+             onerror="this.style.opacity=0.2">
+      </div>
+    </div>
+    <div class="arc-wrap">
+      <svg class="arc-svg" width="48" height="48" viewBox="0 0 48 48">
+        <circle cx="24" cy="24" r="18" fill="none" stroke="#1a3050" stroke-width="4"/>
+        <circle cx="24" cy="24" r="18" fill="none"
+          stroke="${arcColor}" stroke-width="4"
+          stroke-dasharray="${(conf/100)*113} 113"
+          stroke-linecap="round"
+          transform="rotate(-90 24 24)"
+          style="filter:drop-shadow(0 0 4px ${arcColor})"/>
+      </svg>
+      <div>
+        <div class="arc-label">${conf.toFixed(1)}%</div>
+        <div class="arc-sub">ARCFACE CONFIDENCE</div>
+      </div>
+    </div>
+    <div class="match-meta">
+      <div class="match-meta-row">
+        <span>PLATFORM</span><span>${match.platform.toUpperCase()}</span>
+      </div>
+      <div class="match-meta-row">
+        <span>DISTANCE</span><span>${match.distance}</span>
+      </div>
+    </div>
+    <a class="btn-open" href="${match.url}" target="_blank" rel="noopener">
+      [ OPEN PROFILE ]
+    </a>
+  `;
+  gallery.appendChild(card);
+}
+
+// ── Captcha ───────────────────────────────────────────────────────────────────
+function showCaptchaBanner() {
+  document.getElementById("captcha-banner").classList.add("show");
+}
+function dismissCaptcha() {
+  document.getElementById("captcha-banner").classList.remove("show");
+  addLog("✔ Captcha marked as solved — resuming scan...", "upload");
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send("__CAPTCHA_SOLVED__");
+  }
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+initWS();
+</script>
+
+    <style>
+    @keyframes scanAnim { 0% { top: 0%; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }
+    #scan-canvas { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 10; }
+    #scan-line { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: #00ffcc; box-shadow: 0 0 10px #00ffcc; animation: scanAnim 2s infinite linear; z-index: 11; }
+    </style>
+    <script>
+    function drawFacialLandmarks(keypoints) {
+        const img = document.querySelector('#target-image') || document.querySelector('img');
+        if (!img) return;
+        let container = document.getElementById('scan-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'scan-container';
+            container.style.position = 'relative';
+            container.style.display = 'inline-block';
+            img.parentNode.insertBefore(container, img);
+            container.appendChild(img);
+        }
+        let canvas = document.getElementById('scan-canvas');
+        let scanLine = document.getElementById('scan-line');
+        if (!canvas) {
+            canvas = document.createElement('canvas'); canvas.id = 'scan-canvas'; container.appendChild(canvas);
+            scanLine = document.createElement('div'); scanLine.id = 'scan-line'; container.appendChild(scanLine);
+        }
+        canvas.width = img.clientWidth || img.width; canvas.height = img.clientHeight || img.height;
+        const ctx = canvas.getContext('2d');
+        scanLine.style.display = 'block';
+        const rx = canvas.width / img.naturalWidth, ry = canvas.height / img.naturalHeight;
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#ff0055'; ctx.shadowBlur = 10; ctx.shadowColor = '#ff0055';
+        if(keypoints && keypoints.length > 0) {
+            keypoints.forEach((p, i) => {
+                setTimeout(() => {
+                    ctx.beginPath(); ctx.arc(p[0]*rx, p[1]*ry, 3, 0, 2*Math.PI); ctx.fill();
+                    if(i>0) {
+                        ctx.strokeStyle='rgba(0,255,204,0.5)'; ctx.lineWidth=1;
+                        ctx.moveTo(keypoints[i-1][0]*rx, keypoints[i-1][1]*ry);
+                        ctx.lineTo(p[0]*rx, p[1]*ry); ctx.stroke();
+                    }
+                }, i * 200);
+            });
+        }
+    }
+
+    // Monkey patch fetch to intercept target upload and trigger animation
+    const origFetch = window.fetch;
+    window.fetch = async (...args) => {
+        const res = await origFetch(...args);
+        const url = args[0];
+        if (typeof url === 'string' && (url.includes('upload') || url.includes('target'))) {
+            const clone = res.clone();
+            clone.json().then(data => {
+                if(data && data.keypoints) drawFacialLandmarks(data.keypoints);
+            }).catch(e=>console.error("Intercept parse error:", e));
+        }
+        return res;
+    };
+    </script>
+    
+</body>
+</html>
