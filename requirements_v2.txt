@@ -1,0 +1,23 @@
+# OMNI-RECO v2.1 — requirements
+# Core
+opencv-python>=4.8.0
+numpy>=1.24.0
+insightface>=0.7.3
+onnxruntime>=1.16.0
+
+# Géométrie 3D (MediaPipe Face Mesh)
+mediapipe==0.10.9
+
+# Oreilles — YOLOv8 pose (optionnel, fallback MediaPipe si absent)
+ultralytics>=8.0.0
+
+# API REST
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+pydantic>=2.0.0
+httpx>=0.25.0
+
+# Calibration & tests (optionnels)
+scikit-learn>=1.3.0
+rich>=13.0.0
