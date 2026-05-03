@@ -55,7 +55,7 @@ python main.py --web
 ## Architecture
 
 ```
-ShadowMatch-PRO-Data2391/
+shadow-matchv1/
 |
 +-- README.md                  # Fiche technique + Licence Apache 2.0
 +-- main.py                    # Point d'entree : lance CLI ou serveur Web
