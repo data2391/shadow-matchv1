@@ -1,0 +1,38 @@
+# Venv
+.venv/
+venv/
+env/
+
+# Modèles téléchargés automatiquement
+.omni_reco/
+models/
+*.onnx
+*.pt
+
+# Uploads & résultats
+web/uploads/
+results/
+*.json
+
+# Playwright
+node_modules/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

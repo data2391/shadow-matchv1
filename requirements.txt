@@ -1,15 +1,44 @@
-# SHADOW-MATCH dependencies
-insightface>=0.7.3
-onnxruntime>=1.16.0
+# ============================================================
+# SHADOW-MATCH + OMNI-RECO v2.1 — requirements unifiés
+# Installez tout dans le venv avec :
+#   setup_venv.bat  (Windows)
+#   ./setup_venv.sh (Linux/macOS)
+# ============================================================
+
+# ── Core vision ──────────────────────────────────────────────────────
 opencv-python-headless>=4.8.0
 numpy>=1.24.0
-playwright>=1.42.0
+
+# ── Reconnaissance faciale ────────────────────────────────────────────
+insightface>=0.7.3
+onnxruntime>=1.16.0
+
+# ── Géométrie 3D OMNI-RECO v2 ───────────────────────────────────────
+mediapipe==0.10.9          # ATTENTION : version fixée, Python 3.10 requis
+
+# ── Oreilles YOLOv8-pose (optionnel — fallback MediaPipe si absent) ─────
+ultralytics>=8.0.0
+
+# ── Super-résolution (ESRGAN ONNX) ───────────────────────────────────
+# onnxruntime déjà listé ci-dessus
+
+# ── API REST ────────────────────────────────────────────────────────────
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
-jinja2>=3.1.3
 python-multipart>=0.0.9
-rich>=13.7.0
-apscheduler>=3.10.4      # optional — auto-cleanup scheduler
-httpx>=0.27.0               # async HTTP pour fetch images (non-bloquant)
+pydantic>=2.0.0
 
-beautifulsoup4
+# ── Web scraping (shadow-match v1) ──────────────────────────────────
+playwright>=1.42.0
+beautifulsoup4>=4.12.0
+jinja2>=3.1.3
+
+# ── HTTP async ───────────────────────────────────────────────────────
+httpx>=0.27.0
+
+# ── Scheduler nettoyage auto (optionnel) ────────────────────────────
+apscheduler>=3.10.4
+
+# ── Calibration & tests OMNI-RECO (optionnels) ──────────────────────
+rich>=13.7.0
+scikit-learn>=1.3.0
