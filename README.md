@@ -94,6 +94,20 @@ python main.py --no-auto-install ...            # ne jamais rien installer autom
 python -m core.playwright_setup --check         # diagnostic sans rien modifier
 ```
 
+### Arch / BlackArch
+
+`playwright install --with-deps` ne fonctionne qu'avec apt (Debian, Ubuntu, Kali) : sur Arch / BlackArch il est donc desactive
+automatiquement. Si Chromium refuse de demarrer (`libnss3.so`, `libatk...` introuvable), installe les bibliotheques :
+
+```bash
+sudo pacman -S --needed nss nspr at-spi2-core cups libdrm mesa alsa-lib pango cairo libxkbcommon \
+    libxcomposite libxdamage libxrandr libxfixes libx11 libxext libxcb dbus expat
+# ou, plus simple : un Chromium systeme est detecte et utilise automatiquement en repli
+sudo pacman -S chromium
+```
+
+Pour compiler `insightface` : `sudo pacman -S --needed base-devel python`.
+
 `shadow_match.config.json` (modifiable a la main) :
 
 ```json

@@ -280,20 +280,65 @@ def _run(cmd: list, log: LogFn, timeout: int = 900) -> int:
             proc.kill()
 
 
+# ── Distribution Linux ────────────────────────────────────────────────────────────
+OS_RELEASE = Path("/etc/os-release")
+
+# Bibliothèques système requises par Chromium sur Arch / BlackArch (équivalent de --with-deps)
+ARCH_CHROMIUM_DEPS = (
+    "nss nspr at-spi2-core cups libdrm mesa alsa-lib pango cairo libxkbcommon "
+    "libxcomposite libxdamage libxrandr libxfixes libx11 libxext libxcb dbus expat"
+)
+
+
+def linux_distro_ids() -> set:
+    """IDs de la distribution (ID + ID_LIKE de /etc/os-release), ex. {'blackarch', 'arch'}."""
+    ids: set = set()
+    try:
+        for line in OS_RELEASE.read_text(encoding="utf-8", errors="ignore").splitlines():
+            key, _, val = line.partition("=")
+            if key in ("ID", "ID_LIKE"):
+                ids.update(val.strip().strip('"').lower().split())
+    except OSError:
+        pass
+    if Path("/etc/arch-release").exists():
+        ids.add("arch")
+    return ids
+
+
+def is_debian_like() -> bool:
+    return bool(linux_distro_ids() & {"debian", "ubuntu", "kali", "parrot", "linuxmint", "pop"})
+
+
+def is_arch_like() -> bool:
+    return bool(linux_distro_ids() & {"arch", "blackarch", "manjaro", "endeavouros", "cachyos"})
+
+
+def arch_deps_hint(log: LogFn) -> None:
+    """Sur Arch / BlackArch, Playwright ne peut pas installer les libs système tout seul."""
+    log("ℹ Arch / BlackArch : Playwright n'installe pas les libs système (--with-deps = apt seulement).")
+    log(f"  Si Chromium ne démarre pas (libnss3.so, libatk... introuvable) :")
+    log(f"    sudo pacman -S --needed {ARCH_CHROMIUM_DEPS}")
+    log("  Ou plus simple : sudo pacman -S chromium  (détecté ensuite automatiquement en repli)")
+
+
 def install_chromium(log: LogFn = print, with_deps: Optional[bool] = None) -> bool:
     """
     `python -m playwright install chromium` avec l'interpréteur COURANT (venv respecté).
     Sous Linux en root, ajoute --with-deps pour tirer les libs système (libnss3, ...).
     """
     if with_deps is None:
+        # --with-deps passe par apt : uniquement Debian / Ubuntu / Kali & co, et en root.
         with_deps = (
             platform.system() == "Linux"
             and hasattr(os, "geteuid") and os.geteuid() == 0
+            and is_debian_like()
         )
     cmd = [sys.executable, "-m", "playwright", "install", "chromium"]
     if with_deps:
         cmd.append("--with-deps")
     log(f"⬇ Installation de Chromium : {' '.join(cmd)}")
+    if platform.system() == "Linux" and is_arch_like():
+        arch_deps_hint(log)
     rc = _run(cmd, log)
     if rc != 0 and with_deps:
         log("⚠ --with-deps a échoué — nouvelle tentative sans les dépendances système...")
@@ -461,6 +506,16 @@ def is_missing_browser_error(exc: BaseException) -> bool:
     )
 
 
+def is_missing_libs_error(exc: BaseException) -> bool:
+    """True si Chromium démarre mal faute de bibliothèques système (.so) ou de serveur X."""
+    msg = str(exc)
+    return (
+        "error while loading shared libraries" in msg
+        or "Host system is missing dependencies" in msg
+        or "Missing X server" in msg
+    )
+
+
 async def launch_chromium(pw, headless: bool = False, args: Optional[list] = None, log=None):
     """
     Remplace `pw.chromium.launch(...)` : lance Chromium avec le bon exécutable et, si
@@ -479,6 +534,8 @@ async def launch_chromium(pw, headless: bool = False, args: Optional[list] = Non
     try:
         return await pw.chromium.launch(**kwargs)
     except Exception as e:
+        if is_missing_libs_error(e) and platform.system() == "Linux" and is_arch_like():
+            arch_deps_hint(print)
         if not is_missing_browser_error(e):
             raise
         # Détection OK mais le lancement échoue encore (ex. headless-shell manquant) :
@@ -520,6 +577,7 @@ def diagnostic_lines() -> list:
     return [
         f"Python            : {sys.executable}",
         f"Venv actif        : {_venv_label()}",
+        f"Distribution      : {', '.join(sorted(linux_distro_ids())) or platform.system()}",
         f"Playwright (pkg)  : {playwright_package_version() or 'MISSING'}",
         f"Browsers dir      : {bd}  exists={bd.is_dir()}",
         f"Installed         : {', '.join(list_installed_browsers(bd)) or '-'}",
