@@ -29,7 +29,32 @@ def main():
                         help="ArcFace distance threshold (default: 0.45)")
     parser.add_argument("--output", "-o", default="results",
                         help="Output folder for results JSON")
+    parser.add_argument("--setup", action="store_true",
+                        help="Détecte / installe Playwright + Chromium et écrit shadow_match.config.json")
+    parser.add_argument("--browser-path", metavar="PATH",
+                        help="Force l'exécutable Chrome/Chromium à utiliser (sauvegardé dans la config)")
+    parser.add_argument("--no-auto-install", action="store_true",
+                        help="Ne jamais installer automatiquement playwright / chromium")
     args = parser.parse_args()
+
+    if args.no_auto_install:
+        os.environ["SHADOWMATCH_AUTO_INSTALL"] = "0"
+
+    if args.browser_path:
+        from core import playwright_setup as pws
+        if not os.path.isfile(args.browser_path):
+            print_status(f"Chemin introuvable : {args.browser_path}", "error")
+            sys.exit(1)
+        cfg = pws.load_config()
+        cfg["browser_path_override"] = os.path.abspath(args.browser_path)
+        pws.save_config(cfg)
+        print_status(f"Navigateur forcé enregistré dans {pws.config_path()}", "success")
+
+    if args.setup:
+        from core import playwright_setup as pws
+        info = pws.ensure_browser(lambda m: print_status(m), force_check=True)
+        print("\n".join("  " + l for l in pws.diagnostic_lines()))
+        sys.exit(0 if info["ok"] else 1)
 
     if args.web:
         from web.server import run_server

@@ -70,6 +70,11 @@ async def debug():
             lines.append(f"  {pkg:15}: OK   {getattr(mod, '__version__', '?')}")
         except ImportError:
             lines.append(f"  {pkg:15}: MISSING")
+    try:
+        from core.playwright_setup import diagnostic_lines
+        lines += ["", "--- Playwright / navigateur ---"] + ["  " + l for l in diagnostic_lines()]
+    except Exception as e:
+        lines += ["", f"  playwright_setup indisponible : {e}"]
     return "\n".join(lines)
 
 @app.websocket("/ws")

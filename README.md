@@ -35,7 +35,7 @@ Il combine la vision par ordinateur de pointe (**InsightFace ArcFace**) avec un 
 ```bash
 # 1. Installer les dependances
 pip install -r requirements.txt
-playwight install chromium
+python main.py --setup   # détecte Playwright, installe Chromium si absent (équivalent : python -m playwright install chromium)
 
 # 2. Mode CLI — image unique
 python main.py --image target.jpg
@@ -52,6 +52,46 @@ python main.py --web
 
 ---
 
+## Playwright : detection auto + configuration
+
+Erreur classique :
+`BrowserType.launch: Executable doesn't exist at ~/.cache/ms-playwright/chromium-XXXX/... Please run: playwright install`
+
+SHADOW-MATCH la corrige tout seul au lancement (`core/playwright_setup.py`) :
+
+1. detecte le paquet `playwright` (pip install si absent) ;
+2. detecte le dossier des navigateurs (`PLAYWRIGHT_BROWSERS_PATH`, sinon `~/.cache/ms-playwright`, `~/Library/Caches/ms-playwright` ou `%LOCALAPPDATA%\\ms-playwright`) et le chemin exact de chromium attendu par ta version de Playwright ;
+3. lance `<ton python/venv> -m playwright install chromium` si besoin (`--with-deps` auto sous Linux root) ;
+4. se rabat sur Chrome / Chromium / Edge / Brave installe sur la machine si l'install echoue ;
+5. ecrit tout dans `shadow_match.config.json` (ignore par git).
+
+```bash
+python main.py --setup                          # detection + install + ecriture de la config
+python main.py --setup --no-auto-install        # detection seule
+python main.py -i cible.jpg --browser-path /usr/bin/chromium   # forcer un navigateur
+python -m core.playwright_setup --check         # diagnostic sans rien modifier
+```
+
+`shadow_match.config.json` (modifiable a la main) :
+
+```json
+{
+  "auto_install": true,
+  "browser_path_override": null,
+  "browser": {
+    "source": "playwright",
+    "executable_path": "/root/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome",
+    "playwright_version": "1.64.1",
+    "browsers_dir": "/root/.cache/ms-playwright"
+  }
+}
+```
+
+Variables d'environnement : `SHADOWMATCH_BROWSER_PATH`, `SHADOWMATCH_AUTO_INSTALL=0`, `SHADOWMATCH_CONFIG`.
+Le dashboard (`/debug`) affiche aussi l'etat de Playwright.
+
+---
+
 ## Architecture
 
 ```
@@ -63,6 +103,7 @@ shadow-matchv1/
 |
 +-- core/                      # LE CERVEAU (Moteurs IA et OSINT)
 |   +-- __init__.py
+|   +-- playwright_setup.py    # Detection/installation Playwright + chromium, config JSON
 |   +-- face_engine.py         # Coeur biometrique : ArcFace/AdaFace, embeddings 512D
 |   +-- yandex_scraper.py      # Blindage anti-bot : Playwright + bypass FileChooser
 |   +-- multi_engine.py        # Plan B : Google Lens, Bing Visual Search en fallback

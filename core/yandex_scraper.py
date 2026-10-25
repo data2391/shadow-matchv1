@@ -6,6 +6,12 @@ Stratégie : attente changement URL après upload + sélecteurs larges + dump de
 import asyncio, time, io, random, json
 from pathlib import Path
 from typing import Union
+
+from core.playwright_setup import ensure_playwright_package, launch_chromium
+
+# Garantit que le paquet `playwright` est installé AVANT de l'importer
+# (le navigateur Chromium, lui, est détecté/installé au lancement : launch_chromium).
+ensure_playwright_package()
 from playwright.async_api import async_playwright, Page, TimeoutError as PWTimeout
 
 YANDEX_URL = "https://yandex.com/images/"
@@ -113,13 +119,17 @@ class YandexScraper:
 
     async def search_image(self, image: Union[str, bytes, io.BytesIO], max_results: int = 30) -> list:
         async with async_playwright() as pw:
-            browser = await pw.chromium.launch(
+            # Détection de Playwright + installation auto de Chromium si absent
+            # (fix "BrowserType.launch: Executable doesn't exist ... playwright install")
+            browser = await launch_chromium(
+                pw,
                 headless=self.headless,
                 args=[
                     "--disable-blink-features=AutomationControlled",
                     "--no-sandbox",
                     "--start-maximized",
-                ]
+                ],
+                log=self._log,
             )
             ctx = await browser.new_context(
                 user_agent=(
