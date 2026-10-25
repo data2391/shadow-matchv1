@@ -21,12 +21,14 @@ if "--setup" in sys.argv:
     _p.add_argument("--venv-dir")
     _p.add_argument("--requirements", default="requirements.txt")
     _p.add_argument("--skip-requirements", action="store_true")
+    _p.add_argument("--skip-adaface", action="store_true")
     _a, _ = _p.parse_known_args()
     sys.exit(venv_bootstrap.setup(
         venv_dir=_a.venv_dir,
         requirements=_a.requirements,
         skip_requirements=_a.skip_requirements,
         use_current_python=_a.no_venv,
+        skip_adaface=_a.skip_adaface,
     ))
 
 # Un venv du projet existe et on n'est pas dedans -> on relance main.py avec son Python.
@@ -75,6 +77,10 @@ def main():
                         help="Fichier de dépendances pour --setup (défaut : requirements.txt)")
     parser.add_argument("--skip-requirements", action="store_true",
                         help="--setup : ne pas lancer pip install -r (Playwright/Chromium seulement)")
+    parser.add_argument("--skip-adaface", action="store_true",
+                        help="--setup : ne pas télécharger le modèle AdaFace ONNX (~249 Mo, optionnel)")
+    parser.add_argument("--adaface-path", metavar="FILE",
+                        help="Utilise ce modèle AdaFace .onnx (sauvegardé dans la config)")
     parser.add_argument("--no-venv", action="store_true",
                         help="Ne pas utiliser de venv : travaille avec le Python courant")
     parser.add_argument("--browser-path", metavar="PATH",
@@ -85,6 +91,16 @@ def main():
 
     if args.no_auto_install:
         os.environ["SHADOWMATCH_AUTO_INSTALL"] = "0"
+
+    if args.adaface_path:
+        from core import playwright_setup as pws
+        if not os.path.isfile(args.adaface_path):
+            print_status(f"Fichier AdaFace introuvable : {args.adaface_path}", "error")
+            sys.exit(1)
+        cfg = pws.load_config()
+        cfg.setdefault("adaface", {})["path_override"] = os.path.abspath(args.adaface_path)
+        pws.save_config(cfg)
+        print_status(f"Modèle AdaFace forcé enregistré dans {pws.config_path()}", "success")
 
     if args.browser_path:
         from core import playwright_setup as pws

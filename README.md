@@ -33,7 +33,7 @@ Il combine la vision par ordinateur de pointe (**InsightFace ArcFace**) avec un 
 ## Quick Start
 
 ```bash
-# 1. Installation en UNE commande : cree .venv, installe requirements.txt + Playwright + Chromium
+# 1. Installation en UNE commande : cree .venv, installe requirements.txt + Playwright + Chromium + modele AdaFace
 python main.py --setup
 
 # 2. Mode CLI — image unique (relance automatiquement dans .venv, pas besoin de l'activer)
@@ -94,6 +94,31 @@ python main.py --no-auto-install ...            # ne jamais rien installer autom
 python -m core.playwright_setup --check         # diagnostic sans rien modifier
 ```
 
+### Modele AdaFace ONNX (detection + telechargement auto)
+
+Le module PRO charge `~/.insightface/models/adaface_ir101.onnx`. S'il manque, SHADOW-MATCH le telecharge tout seul
+(`core/adaface_setup.py`) : au `--setup`, au demarrage de `--web` (avant l'ouverture du port, pour ne pas bloquer le dashboard)
+et au chargement du moteur en CLI.
+
+1. cherche le fichier : chemin force (`SHADOWMATCH_ADAFACE_PATH` / `--adaface-path`), puis `~/.insightface/models/` (noms `adaface_ir101.onnx`,
+   `adaface_ir_101.onnx`, ...), puis `./models/` ;
+2. le **valide** avec ONNX Runtime (entree 3x112x112, sortie 512D) ; un fichier tronque ou corrompu est mis de cote (`.invalid`) puis re-telecharge ;
+3. sinon telecharge AdaFace IR-101 / WebFace12M (249 Mo) depuis GitHub (`yakhyo/adaface-onnx`, MIT), avec repli sur Hugging Face
+   (`yakhyo/uniface-weights`) ; **reprise** si la connexion coupe, **controle SHA-256** (`f2eb07d0...a43e`), ecriture atomique : un fichier incomplet
+   ou modifie n'est jamais utilise ;
+4. ecrit le resultat dans la cle `adaface` de `shadow_match.config.json`.
+
+```bash
+python -m core.adaface_setup               # detecte / telecharge / valide
+python -m core.adaface_setup --check       # diagnostic sans rien telecharger
+python -m core.adaface_setup --path ~/mon_adaface.onnx   # utiliser un modele existant
+python main.py --setup --skip-adaface      # setup sans AdaFace
+SHADOWMATCH_ADAFACE=0 python main.py ...   # desactiver AdaFace completement
+```
+
+AdaFace est optionnel : s'il est indisponible, l'outil continue sans (`fusion desactivee`). `--no-auto-install` interdit aussi ce telechargement.
+Le modele est tiers et n'est pas inclus dans le depot : verifie sa licence / ses conditions d'usage (AdaFace, Kim et al., CVPR 2022 ; donnees WebFace12M).
+
 ### Arch / BlackArch
 
 `playwright install --with-deps` ne fonctionne qu'avec apt (Debian, Ubuntu, Kali) : sur Arch / BlackArch il est donc desactive
@@ -114,6 +139,12 @@ Pour compiler `insightface` : `sudo pacman -S --needed base-devel python`.
 {
   "auto_install": true,
   "browser_path_override": null,
+  "adaface": {
+    "enabled": true,
+    "path_override": null,
+    "ok": true,
+    "path": "/root/.insightface/models/adaface_ir101.onnx"
+  },
   "venv": {
     "dir": "/home/user/shadow-matchv1/.venv",
     "python": "/home/user/shadow-matchv1/.venv/bin/python"
@@ -127,8 +158,8 @@ Pour compiler `insightface` : `sudo pacman -S --needed base-devel python`.
 }
 ```
 
-Variables d'environnement : `SHADOWMATCH_VENV`, `SHADOWMATCH_NO_VENV`, `SHADOWMATCH_BROWSER_PATH`, `SHADOWMATCH_AUTO_INSTALL=0`, `SHADOWMATCH_CONFIG`.
-Le dashboard (`/debug`) affiche aussi l'etat du venv et de Playwright.
+Variables d'environnement : `SHADOWMATCH_VENV`, `SHADOWMATCH_NO_VENV`, `SHADOWMATCH_BROWSER_PATH`, `SHADOWMATCH_ADAFACE`, `SHADOWMATCH_ADAFACE_PATH`, `SHADOWMATCH_AUTO_INSTALL=0`, `SHADOWMATCH_CONFIG`.
+Le dashboard (`/debug`) affiche aussi l'etat du venv, de Playwright et d'AdaFace.
 
 ---
 
@@ -145,6 +176,7 @@ shadow-matchv1/
 |   +-- __init__.py
 |   +-- venv_bootstrap.py      # Creation / relance dans le venv (stdlib seule), --setup
 |   +-- playwright_setup.py    # Detection/installation Playwright + chromium, config JSON
+|   +-- adaface_setup.py       # Detection/telechargement/validation du modele AdaFace ONNX
 |   +-- face_engine.py         # Coeur biometrique : ArcFace/AdaFace, embeddings 512D
 |   +-- yandex_scraper.py      # Blindage anti-bot : Playwright + bypass FileChooser
 |   +-- multi_engine.py        # Plan B : Google Lens, Bing Visual Search en fallback

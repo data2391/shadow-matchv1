@@ -74,18 +74,27 @@ class FaceEngine:
             print_status(f"Model {self.model_name} ready.", "success")
 
             # --- PRO FEATURE: AdaFace Loading ---
+            # Détection (~/.insightface/models/adaface_ir101.onnx & co) + téléchargement auto
+            # vérifié (SHA-256) si absent : voir core/adaface_setup.py
             self.adaface = None
             try:
-                import onnxruntime
-                from pathlib import Path
-                adaface_path = Path.home() / ".insightface" / "models" / "adaface_ir101.onnx"
-                if adaface_path.exists():
-                    self.adaface = onnxruntime.InferenceSession(str(adaface_path), providers=["CPUExecutionProvider"])
+                from core.adaface_setup import load_adaface_session
+
+                def _log(msg: str):
+                    lvl = ("error" if msg.lstrip().startswith("✖")
+                           else "warning" if msg.lstrip().startswith("⚠")
+                           else "success" if msg.lstrip().startswith("✔")
+                           else "info")
+                    print_status(msg.lstrip("✖⚠✔ ").rstrip() if lvl != "info" else msg, lvl)
+
+                self.adaface = load_adaface_session(_log)
+                if self.adaface is not None:
                     print_status("[PRO] AdaFace ONNX fusion module loaded.", "success")
                 else:
-                    print_status("[PRO] AdaFace ONNX introuvable (fusion désactivée).", "warning")
+                    print_status("[PRO] AdaFace ONNX indisponible (fusion désactivée). "
+                                 "Réessaie : python -m core.adaface_setup", "warning")
             except Exception as e:
-                pass
+                print_status(f"[PRO] AdaFace non chargé ({e}) — fusion désactivée.", "warning")
         except ImportError:
             print("InsightFace non installé.")
             self.app = None

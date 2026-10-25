@@ -72,7 +72,9 @@ async def debug():
             lines.append(f"  {pkg:15}: MISSING")
     try:
         from core.playwright_setup import diagnostic_lines
+        from core.adaface_setup import diagnostic_lines as ada_lines
         lines += ["", "--- Playwright / navigateur ---"] + ["  " + l for l in diagnostic_lines()]
+        lines += ["", "--- AdaFace ---"] + ["  " + l for l in ada_lines()]
     except Exception as e:
         lines += ["", f"  playwright_setup indisponible : {e}"]
     return "\n".join(lines)
@@ -222,6 +224,13 @@ async def _run_scan(img_bytes, stealth, model_name, threshold, broadcast, previe
 
 
 def run_server(host: str = "0.0.0.0", port: int = 8080):
+    # Pré-vol AVANT de démarrer uvicorn : un éventuel téléchargement d'AdaFace (~249 Mo)
+    # ne bloque ainsi pas l'event loop / le WebSocket pendant un scan.
+    try:
+        from core.adaface_setup import ensure_adaface
+        ensure_adaface(lambda m: print("  " + m, flush=True))
+    except Exception as e:
+        print(f"  [PRO] AdaFace non vérifié au démarrage : {e}", flush=True)
     print(f"\n  SHADOW-MATCH  ->  http://localhost:{port}")
     print(f"  Debug         ->  http://localhost:{port}/debug\n")
     uvicorn.run("web.server:app", host=host, port=port, log_level="info", reload=False)

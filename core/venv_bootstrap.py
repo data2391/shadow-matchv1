@@ -12,7 +12,8 @@ Ce que fait ce module :
                                1) crée .venv si nécessaire (ou réutilise le venv actif)
                                2) pip install -r requirements.txt  (avec le pip DU venv)
                                3) installe Playwright + Chromium avec le Python DU venv
-                               4) écrit le venv dans shadow_match.config.json
+                               4) télécharge le modèle AdaFace ONNX (core/adaface_setup.py)
+                               5) écrit le venv dans shadow_match.config.json
 
 Pourquoi un venv : Kali / Debian / Ubuntu récents refusent `pip install` hors venv
 ("externally-managed-environment", PEP 668), et `playwright install` doit être lancé
@@ -176,6 +177,7 @@ def setup(
     requirements: str = "requirements.txt",
     skip_requirements: bool = False,
     use_current_python: bool = False,
+    skip_adaface: bool = False,
     log: LogFn = print,
 ) -> int:
     """
@@ -183,7 +185,7 @@ def setup(
     Réutilise le venv actif si on est déjà dans un venv (aucun venv imbriqué).
     """
     log("═" * 54)
-    log("SHADOW-MATCH — setup (venv + dépendances + Playwright)")
+    log("SHADOW-MATCH — setup (venv + dépendances + Playwright + AdaFace)")
     log("═" * 54)
     log(f"Python hôte : {sys.executable}  ({sys.version.split()[0]})")
 
@@ -227,6 +229,16 @@ def setup(
     if vdir is not None:
         os.environ["SHADOWMATCH_VENV"] = str(vdir)
     pw_rc = _run([py, "-m", "core.playwright_setup", "--reset"], log)
+
+    # 3b) AdaFace ONNX (optionnel : un échec n'invalide pas le setup) ───────────────
+    ada_rc = 0
+    if skip_adaface:
+        log("↷ AdaFace ignoré (--skip-adaface)")
+    else:
+        ada_rc = _run([py, "-m", "core.adaface_setup", "--force"], log)
+        if ada_rc != 0:
+            log("⚠ AdaFace non installé (optionnel — la fusion AdaFace restera désactivée).")
+            log("  Réessaie plus tard : python -m core.adaface_setup")
 
     # 4) Mémorise le venv dans shadow_match.config.json ────────────────────────────
     if vdir is not None:
