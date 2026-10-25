@@ -60,7 +60,7 @@ Erreur classique :
 SHADOW-MATCH la corrige tout seul au lancement (`core/playwright_setup.py`) :
 
 1. detecte le paquet `playwright` (pip install si absent) ;
-2. detecte le dossier des navigateurs (`PLAYWRIGHT_BROWSERS_PATH`, sinon `~/.cache/ms-playwright`, `~/Library/Caches/ms-playwright` ou `%LOCALAPPDATA%\\ms-playwright`) et le chemin exact de chromium attendu par ta version de Playwright ;
+2. detecte le dossier des navigateurs (`PLAYWRIGHT_BROWSERS_PATH`, sinon `~/.cache/ms-playwright`, `~/Library/Caches/ms-playwright` ou `%LOCALAPPDATA%\ms-playwright`) et le chemin exact de chromium attendu par ta version de Playwright ;
 3. lance `<ton python/venv> -m playwright install chromium` si besoin (`--with-deps` auto sous Linux root) ;
 4. se rabat sur Chrome / Chromium / Edge / Brave installe sur la machine si l'install echoue ;
 5. ecrit tout dans `shadow_match.config.json` (ignore par git).
