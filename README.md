@@ -33,11 +33,10 @@ Il combine la vision par ordinateur de pointe (**InsightFace ArcFace**) avec un 
 ## Quick Start
 
 ```bash
-# 1. Installer les dependances
-pip install -r requirements.txt
-python main.py --setup   # détecte Playwright, installe Chromium si absent (équivalent : python -m playwright install chromium)
+# 1. Installation en UNE commande : cree .venv, installe requirements.txt + Playwright + Chromium
+python main.py --setup
 
-# 2. Mode CLI — image unique
+# 2. Mode CLI — image unique (relance automatiquement dans .venv, pas besoin de l'activer)
 python main.py --image target.jpg
 
 # 3. Mode CLI — dossier batch (buffalo_s = plus leger)
@@ -52,23 +51,46 @@ python main.py --web
 
 ---
 
-## Playwright : detection auto + configuration
+## Venv, Playwright et configuration
 
-Erreur classique :
-`BrowserType.launch: Executable doesn't exist at ~/.cache/ms-playwright/chromium-XXXX/... Please run: playwright install`
+### Pourquoi un venv
 
-SHADOW-MATCH la corrige tout seul au lancement (`core/playwright_setup.py`) :
+Kali, Debian et Ubuntu recents refusent `pip install` hors venv (`externally-managed-environment`, PEP 668),
+et `playwright install` doit etre lance avec le meme Python que celui qui execute l'outil.
+SHADOW-MATCH gere donc tout dans un venv du projet (`core/venv_bootstrap.py`) :
 
-1. detecte le paquet `playwright` (pip install si absent) ;
+- `python main.py --setup` : cree `.venv` (ou reutilise `venv/`, `env/` ou le venv actif), fait `pip install -r requirements.txt`
+  avec le pip **du venv**, installe Chromium avec le Python **du venv**, puis memorise le venv dans la config ;
+- ensuite, `python main.py ...` lance depuis n'importe quel Python **se relance tout seul dans le venv** (aucune activation requise) ;
+- `--no-venv` ou `SHADOWMATCH_NO_VENV=1` pour travailler avec le Python courant ;
+- hors venv, l'outil n'execute **jamais** `pip install` dans le Python systeme : il t'indique `python main.py --setup`.
+
+Manuel, si tu preferes :
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate            # Windows : .venv\Scripts\activate
+pip install -r requirements.txt
+python -m playwright install chromium
+```
+
+### Erreur "Executable doesn't exist ... playwright install"
+
+`BrowserType.launch: Executable doesn't exist at ~/.cache/ms-playwright/chromium-XXXX/...` est corrigee automatiquement
+au lancement (`core/playwright_setup.py`) :
+
+1. detecte le paquet `playwright` (pip install uniquement dans un venv) ;
 2. detecte le dossier des navigateurs (`PLAYWRIGHT_BROWSERS_PATH`, sinon `~/.cache/ms-playwright`, `~/Library/Caches/ms-playwright` ou `%LOCALAPPDATA%\ms-playwright`) et le chemin exact de chromium attendu par ta version de Playwright ;
-3. lance `<ton python/venv> -m playwright install chromium` si besoin (`--with-deps` auto sous Linux root) ;
+3. lance `<python du venv> -m playwright install chromium` si besoin (`--with-deps` auto sous Linux root) ;
 4. se rabat sur Chrome / Chromium / Edge / Brave installe sur la machine si l'install echoue ;
 5. ecrit tout dans `shadow_match.config.json` (ignore par git).
 
 ```bash
-python main.py --setup                          # detection + install + ecriture de la config
-python main.py --setup --no-auto-install        # detection seule
+python main.py --setup                          # venv + dependances + Chromium + ecriture de la config
+python main.py --setup --skip-requirements      # Playwright / Chromium seulement
+python main.py --setup --venv-dir venv          # utiliser un autre dossier de venv
 python main.py -i cible.jpg --browser-path /usr/bin/chromium   # forcer un navigateur
+python main.py --no-auto-install ...            # ne jamais rien installer automatiquement
 python -m core.playwright_setup --check         # diagnostic sans rien modifier
 ```
 
@@ -78,6 +100,10 @@ python -m core.playwright_setup --check         # diagnostic sans rien modifier
 {
   "auto_install": true,
   "browser_path_override": null,
+  "venv": {
+    "dir": "/home/user/shadow-matchv1/.venv",
+    "python": "/home/user/shadow-matchv1/.venv/bin/python"
+  },
   "browser": {
     "source": "playwright",
     "executable_path": "/root/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome",
@@ -87,8 +113,8 @@ python -m core.playwright_setup --check         # diagnostic sans rien modifier
 }
 ```
 
-Variables d'environnement : `SHADOWMATCH_BROWSER_PATH`, `SHADOWMATCH_AUTO_INSTALL=0`, `SHADOWMATCH_CONFIG`.
-Le dashboard (`/debug`) affiche aussi l'etat de Playwright.
+Variables d'environnement : `SHADOWMATCH_VENV`, `SHADOWMATCH_NO_VENV`, `SHADOWMATCH_BROWSER_PATH`, `SHADOWMATCH_AUTO_INSTALL=0`, `SHADOWMATCH_CONFIG`.
+Le dashboard (`/debug`) affiche aussi l'etat du venv et de Playwright.
 
 ---
 
@@ -103,6 +129,7 @@ shadow-matchv1/
 |
 +-- core/                      # LE CERVEAU (Moteurs IA et OSINT)
 |   +-- __init__.py
+|   +-- venv_bootstrap.py      # Creation / relance dans le venv (stdlib seule), --setup
 |   +-- playwright_setup.py    # Detection/installation Playwright + chromium, config JSON
 |   +-- face_engine.py         # Coeur biometrique : ArcFace/AdaFace, embeddings 512D
 |   +-- yandex_scraper.py      # Blindage anti-bot : Playwright + bypass FileChooser

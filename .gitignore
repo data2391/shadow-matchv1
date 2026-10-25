@@ -6,3 +6,6 @@ web/uploads/
 results/
 debug_*.png
 debug_*.html
+.venv/
+venv/
+env/

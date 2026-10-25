@@ -6,7 +6,45 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import argparse
-from cli.interface import splash_screen, print_status
+
+# ── Venv / setup : AVANT tout import de dépendance tierce (rich, playwright, insightface...) ──
+# core.venv_bootstrap n'utilise que la stdlib : il peut créer le venv puis relancer l'outil dedans.
+from core import venv_bootstrap
+
+if "--no-venv" in sys.argv:
+    os.environ["SHADOWMATCH_NO_VENV"] = "1"
+
+if "--setup" in sys.argv:
+    _p = argparse.ArgumentParser(add_help=False)
+    _p.add_argument("--setup", action="store_true")
+    _p.add_argument("--no-venv", action="store_true")
+    _p.add_argument("--venv-dir")
+    _p.add_argument("--requirements", default="requirements.txt")
+    _p.add_argument("--skip-requirements", action="store_true")
+    _a, _ = _p.parse_known_args()
+    sys.exit(venv_bootstrap.setup(
+        venv_dir=_a.venv_dir,
+        requirements=_a.requirements,
+        skip_requirements=_a.skip_requirements,
+        use_current_python=_a.no_venv,
+    ))
+
+# Un venv du projet existe et on n'est pas dedans -> on relance main.py avec son Python.
+venv_bootstrap.maybe_reexec_in_venv()
+
+try:
+    from cli.interface import splash_screen, print_status
+except ModuleNotFoundError as _e:
+    print(f"✖ Dépendance manquante : {_e.name}\n"
+          f"  Lance d'abord :  python main.py --setup   (crée .venv + installe tout + Chromium)")
+    sys.exit(1)
+
+def _missing_dependency(exc):
+    """Dépendance absente : message clair au lieu d'une trace Python."""
+    print_status(f"Dépendance manquante : {exc.name}", "error")
+    print_status("Lance :  python main.py --setup   (crée .venv, installe tout + Chromium)", "warning")
+    sys.exit(1)
+
 
 def main():
     splash_screen()
@@ -30,7 +68,15 @@ def main():
     parser.add_argument("--output", "-o", default="results",
                         help="Output folder for results JSON")
     parser.add_argument("--setup", action="store_true",
-                        help="Détecte / installe Playwright + Chromium et écrit shadow_match.config.json")
+                        help="Crée .venv, installe requirements + Playwright + Chromium, écrit shadow_match.config.json")
+    parser.add_argument("--venv-dir", metavar="DIR",
+                        help="Dossier du venv pour --setup (défaut : .venv, ou venv/env s'ils existent)")
+    parser.add_argument("--requirements", metavar="FILE", default="requirements.txt",
+                        help="Fichier de dépendances pour --setup (défaut : requirements.txt)")
+    parser.add_argument("--skip-requirements", action="store_true",
+                        help="--setup : ne pas lancer pip install -r (Playwright/Chromium seulement)")
+    parser.add_argument("--no-venv", action="store_true",
+                        help="Ne pas utiliser de venv : travaille avec le Python courant")
     parser.add_argument("--browser-path", metavar="PATH",
                         help="Force l'exécutable Chrome/Chromium à utiliser (sauvegardé dans la config)")
     parser.add_argument("--no-auto-install", action="store_true",
@@ -50,14 +96,11 @@ def main():
         pws.save_config(cfg)
         print_status(f"Navigateur forcé enregistré dans {pws.config_path()}", "success")
 
-    if args.setup:
-        from core import playwright_setup as pws
-        info = pws.ensure_browser(lambda m: print_status(m), force_check=True)
-        print("\n".join("  " + l for l in pws.diagnostic_lines()))
-        sys.exit(0 if info["ok"] else 1)
-
     if args.web:
-        from web.server import run_server
+        try:
+            from web.server import run_server
+        except ModuleNotFoundError as e:
+            _missing_dependency(e)
         run_server()
         return
 
@@ -65,9 +108,12 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    from core.face_engine import FaceEngine
-    from core.yandex_scraper import YandexScraper
-    from core.cleanup import CleanupManager
+    try:
+        from core.face_engine import FaceEngine
+        from core.yandex_scraper import YandexScraper
+        from core.cleanup import CleanupManager
+    except ModuleNotFoundError as e:
+        _missing_dependency(e)
 
     # Nettoyage uploads au démarrage
     upload_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "uploads")

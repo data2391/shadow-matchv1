@@ -6,7 +6,8 @@ Corrige l'erreur :
     Looks like Playwright was just installed or updated. Please run: playwright install
 
 Ce que fait ce module :
-  1. Détecte le paquet Python `playwright` (et sa version) -> pip install si absent.
+  1. Détecte le paquet Python `playwright` (et sa version) -> pip install si absent
+     (uniquement dans un venv, cf. core/venv_bootstrap.py ; jamais dans le Python système).
   2. Détecte le répertoire des navigateurs Playwright (PLAYWRIGHT_BROWSERS_PATH, sinon
      chemin par défaut Windows / macOS / Linux) et le chemin EXACT de chromium attendu
      par la version de Playwright installée.
@@ -125,7 +126,15 @@ def ensure_playwright_package(log: LogFn = print, auto_install: Optional[bool] =
         log("✖ Paquet Python 'playwright' absent -> pip install playwright")
         return None
 
-    log("⚠ Paquet 'playwright' absent — installation (pip)...")
+    # Jamais de pip dans le Python système (PEP 668 sur Kali/Debian/Ubuntu + pollution) :
+    # on n'installe automatiquement que dans un venv.
+    from core.venv_bootstrap import in_venv
+    if not in_venv():
+        log("✖ Paquet Python 'playwright' absent et aucun venv actif.")
+        log("  Lance :  python main.py --setup   (crée .venv, installe tout, configure Chromium)")
+        return None
+
+    log("⚠ Paquet 'playwright' absent — installation (pip, dans le venv)...")
     rc = _run([sys.executable, "-m", "pip", "install", "playwright>=1.42.0"], log)
     importlib.invalidate_caches()
     version = playwright_package_version()
@@ -496,12 +505,21 @@ async def launch_chromium(pw, headless: bool = False, args: Optional[list] = Non
 # ══════════════════════════════════════════════════════════════════════════════
 #  Diagnostic (affiché par `main.py --setup` et /debug)
 # ══════════════════════════════════════════════════════════════════════════════
+def _venv_label() -> str:
+    from core.venv_bootstrap import in_venv, find_venv
+    if in_venv():
+        return f"oui ({sys.prefix})"
+    found = find_venv()
+    return f"non — venv du projet trouvé : {found}" if found else "non — aucun venv (python main.py --setup)"
+
+
 def diagnostic_lines() -> list:
     cfg = load_config()
     b = cfg.get("browser") or {}
     bd = default_browsers_dir()
     return [
         f"Python            : {sys.executable}",
+        f"Venv actif        : {_venv_label()}",
         f"Playwright (pkg)  : {playwright_package_version() or 'MISSING'}",
         f"Browsers dir      : {bd}  exists={bd.is_dir()}",
         f"Installed         : {', '.join(list_installed_browsers(bd)) or '-'}",
