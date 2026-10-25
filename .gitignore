@@ -1,0 +1,11 @@
+shadow_match.config.json
+shadow_match.config.tmp
+__pycache__/
+*.pyc
+web/uploads/
+results/
+debug_*.png
+debug_*.html
+.venv/
+venv/
+env/

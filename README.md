@@ -33,11 +33,10 @@ Il combine la vision par ordinateur de pointe (**InsightFace ArcFace**) avec un 
 ## Quick Start
 
 ```bash
-# 1. Installer les dependances
-pip install -r requirements.txt
-playwight install chromium
+# 1. Installation en UNE commande : cree .venv, installe requirements.txt + Playwright + Chromium + modele AdaFace
+python main.py --setup
 
-# 2. Mode CLI — image unique
+# 2. Mode CLI — image unique (relance automatiquement dans .venv, pas besoin de l'activer)
 python main.py --image target.jpg
 
 # 3. Mode CLI — dossier batch (buffalo_s = plus leger)
@@ -52,6 +51,118 @@ python main.py --web
 
 ---
 
+## Venv, Playwright et configuration
+
+### Pourquoi un venv
+
+Kali, Debian et Ubuntu recents refusent `pip install` hors venv (`externally-managed-environment`, PEP 668),
+et `playwright install` doit etre lance avec le meme Python que celui qui execute l'outil.
+SHADOW-MATCH gere donc tout dans un venv du projet (`core/venv_bootstrap.py`) :
+
+- `python main.py --setup` : cree `.venv` (ou reutilise `venv/`, `env/` ou le venv actif), fait `pip install -r requirements.txt`
+  avec le pip **du venv**, installe Chromium avec le Python **du venv**, puis memorise le venv dans la config ;
+- ensuite, `python main.py ...` lance depuis n'importe quel Python **se relance tout seul dans le venv** (aucune activation requise) ;
+- `--no-venv` ou `SHADOWMATCH_NO_VENV=1` pour travailler avec le Python courant ;
+- hors venv, l'outil n'execute **jamais** `pip install` dans le Python systeme : il t'indique `python main.py --setup`.
+
+Manuel, si tu preferes :
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate            # Windows : .venv\Scripts\activate
+pip install -r requirements.txt
+python -m playwright install chromium
+```
+
+### Erreur "Executable doesn't exist ... playwright install"
+
+`BrowserType.launch: Executable doesn't exist at ~/.cache/ms-playwright/chromium-XXXX/...` est corrigee automatiquement
+au lancement (`core/playwright_setup.py`) :
+
+1. detecte le paquet `playwright` (pip install uniquement dans un venv) ;
+2. detecte le dossier des navigateurs (`PLAYWRIGHT_BROWSERS_PATH`, sinon `~/.cache/ms-playwright`, `~/Library/Caches/ms-playwright` ou `%LOCALAPPDATA%\ms-playwright`) et le chemin exact de chromium attendu par ta version de Playwright ;
+3. lance `<python du venv> -m playwright install chromium` si besoin (`--with-deps` auto sous Linux root) ;
+4. se rabat sur Chrome / Chromium / Edge / Brave installe sur la machine si l'install echoue ;
+5. ecrit tout dans `shadow_match.config.json` (ignore par git).
+
+```bash
+python main.py --setup                          # venv + dependances + Chromium + ecriture de la config
+python main.py --setup --skip-requirements      # Playwright / Chromium seulement
+python main.py --setup --venv-dir venv          # utiliser un autre dossier de venv
+python main.py -i cible.jpg --browser-path /usr/bin/chromium   # forcer un navigateur
+python main.py --no-auto-install ...            # ne jamais rien installer automatiquement
+python -m core.playwright_setup --check         # diagnostic sans rien modifier
+```
+
+### Modele AdaFace ONNX (detection + telechargement auto)
+
+Le module PRO charge `~/.insightface/models/adaface_ir101.onnx`. S'il manque, SHADOW-MATCH le telecharge tout seul
+(`core/adaface_setup.py`) : au `--setup`, au demarrage de `--web` (avant l'ouverture du port, pour ne pas bloquer le dashboard)
+et au chargement du moteur en CLI.
+
+1. cherche le fichier : chemin force (`SHADOWMATCH_ADAFACE_PATH` / `--adaface-path`), puis `~/.insightface/models/` (noms `adaface_ir101.onnx`,
+   `adaface_ir_101.onnx`, ...), puis `./models/` ;
+2. le **valide** avec ONNX Runtime (entree 3x112x112, sortie 512D) ; un fichier tronque ou corrompu est mis de cote (`.invalid`) puis re-telecharge ;
+3. sinon telecharge AdaFace IR-101 / WebFace12M (249 Mo) depuis GitHub (`yakhyo/adaface-onnx`, MIT), avec repli sur Hugging Face
+   (`yakhyo/uniface-weights`) ; **reprise** si la connexion coupe, **controle SHA-256** (`f2eb07d0...a43e`), ecriture atomique : un fichier incomplet
+   ou modifie n'est jamais utilise ;
+4. ecrit le resultat dans la cle `adaface` de `shadow_match.config.json`.
+
+```bash
+python -m core.adaface_setup               # detecte / telecharge / valide
+python -m core.adaface_setup --check       # diagnostic sans rien telecharger
+python -m core.adaface_setup --path ~/mon_adaface.onnx   # utiliser un modele existant
+python main.py --setup --skip-adaface      # setup sans AdaFace
+SHADOWMATCH_ADAFACE=0 python main.py ...   # desactiver AdaFace completement
+```
+
+AdaFace est optionnel : s'il est indisponible, l'outil continue sans (`fusion desactivee`). `--no-auto-install` interdit aussi ce telechargement.
+Le modele est tiers et n'est pas inclus dans le depot : verifie sa licence / ses conditions d'usage (AdaFace, Kim et al., CVPR 2022 ; donnees WebFace12M).
+
+### Arch / BlackArch
+
+`playwright install --with-deps` ne fonctionne qu'avec apt (Debian, Ubuntu, Kali) : sur Arch / BlackArch il est donc desactive
+automatiquement. Si Chromium refuse de demarrer (`libnss3.so`, `libatk...` introuvable), installe les bibliotheques :
+
+```bash
+sudo pacman -S --needed nss nspr at-spi2-core cups libdrm mesa alsa-lib pango cairo libxkbcommon \
+    libxcomposite libxdamage libxrandr libxfixes libx11 libxext libxcb dbus expat
+# ou, plus simple : un Chromium systeme est detecte et utilise automatiquement en repli
+sudo pacman -S chromium
+```
+
+Pour compiler `insightface` : `sudo pacman -S --needed base-devel python`.
+
+`shadow_match.config.json` (modifiable a la main) :
+
+```json
+{
+  "auto_install": true,
+  "browser_path_override": null,
+  "adaface": {
+    "enabled": true,
+    "path_override": null,
+    "ok": true,
+    "path": "/root/.insightface/models/adaface_ir101.onnx"
+  },
+  "venv": {
+    "dir": "/home/user/shadow-matchv1/.venv",
+    "python": "/home/user/shadow-matchv1/.venv/bin/python"
+  },
+  "browser": {
+    "source": "playwright",
+    "executable_path": "/root/.cache/ms-playwright/chromium-1217/chrome-linux64/chrome",
+    "playwright_version": "1.64.1",
+    "browsers_dir": "/root/.cache/ms-playwright"
+  }
+}
+```
+
+Variables d'environnement : `SHADOWMATCH_VENV`, `SHADOWMATCH_NO_VENV`, `SHADOWMATCH_BROWSER_PATH`, `SHADOWMATCH_ADAFACE`, `SHADOWMATCH_ADAFACE_PATH`, `SHADOWMATCH_AUTO_INSTALL=0`, `SHADOWMATCH_CONFIG`.
+Le dashboard (`/debug`) affiche aussi l'etat du venv, de Playwright et d'AdaFace.
+
+---
+
 ## Architecture
 
 ```
@@ -63,6 +174,9 @@ shadow-matchv1/
 |
 +-- core/                      # LE CERVEAU (Moteurs IA et OSINT)
 |   +-- __init__.py
+|   +-- venv_bootstrap.py      # Creation / relance dans le venv (stdlib seule), --setup
+|   +-- playwright_setup.py    # Detection/installation Playwright + chromium, config JSON
+|   +-- adaface_setup.py       # Detection/telechargement/validation du modele AdaFace ONNX
 |   +-- face_engine.py         # Coeur biometrique : ArcFace/AdaFace, embeddings 512D
 |   +-- yandex_scraper.py      # Blindage anti-bot : Playwright + bypass FileChooser
 |   +-- multi_engine.py        # Plan B : Google Lens, Bing Visual Search en fallback
